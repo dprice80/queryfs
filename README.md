@@ -48,10 +48,15 @@ root/
 queryfs_filecheck.m takes the spreadsheet of IDs and allows the user to create a file system query based on that ID information. Q.searchpaths is a N x 2 cell array. Column 1 contains the name for a particular search (used later to reference results), while col 2 take the filesystem query. The search path can contain wildcards to match any string in the filename (note the extraneous characters in .mat files above).
  
 Q = [];
+
 Q.fileinfo = '/root/studyids.csv';
+
 Q.searchpaths = {
+
     'matfiles' '/root/<ID1>/<ID2>*.mat'
+    
     };
+    
 
 Q = queryfs(Q);
 
