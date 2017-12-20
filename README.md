@@ -13,9 +13,9 @@ Sub01 | sub1id1 | sub1id2
 Sub01 | sub2id1 | sub2id2
 Sub01 | sub3id1 | sub3id2
 
-So that the filesystem is laid out as follows:
+So that the filesystem is laid out as follows (see example_filesystem in repository root):
 
-    root/
+    example_filesystem/
 
         studyids.csv
 
