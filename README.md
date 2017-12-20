@@ -56,21 +56,21 @@ queryfs_filecheck.m takes the spreadsheet of IDs and allows the user to create a
 
 files = Q.filenames.matfiles;
 
-Q also contains all the ID information from the spreadsheet.
+Q also contains all the ID information from the spreadsheet, as well as a list of options / defaults
 
     Q = 
 
-               fileinfo: [1x1 struct]
+               fileinfo: [1x1 struct] (contains date strings/nums for each file found)
             searchpaths: {'files'  'example_filesystem/<STUDYID>/file_<ID1>*.mat'}
-                sublist: [1 2]
-           fileindexmat: [2x1 logical]
+                sublist: [1 2] (index of subjects)
+           fileindexmat: [2x1 logical] (logical index of files that exist)
                 rootdir: ''
                   debug: 0
-        returnfirstfile: 0
-                verbose: 0
-              listfound: 0
-                     ID: [1x1 struct]
-              filenames: [1x1 struct]
-              fileindex: [1x1 struct]
-              dataflags: [1x1 struct]
-               allexist: [1 2]
+        returnfirstfile: 0 (if > 1 file found, then return only the first file, otherwise print warning and empty result)
+                verbose: 0 (print files as they are found)
+              listfound: 0 (similar to above)
+                     ID: [1x1 struct] (struct array containing tabular data from the spreadsheet: IDs etc.)
+              filenames: [1x1 struct] (cell arrays of filenames. Struct fields are named according to .searchpaths)
+              fileindex: [1x1 struct] (index of files found Struct fields names according to .searchpaths)
+              dataflags: [1x1 struct] (not currenly used)
+               allexist: [1 2] (indices of rows of .fileinfo that exist 
