@@ -4,13 +4,13 @@ classdef query_files_obj < handle
     %%%
     %%% Inputs
     %%% The function takes a structure with at least one field
-    %%% (SessionList) (see below for example)
+    %%% (searchpaths) (see below for example)
     %%%
     %%%
     %%% Optional Inputs
     %%%             rootdir: Optional Input: Default = '', Prefix for all search paths e.g. '/imaging/camcan/cc280/mri/'
-    %%%           ListFound: Optional Input: Default = 0,  Lists all files found durng search
-    %%%     SelectFirstFile: Optional Input: Default = 0,  When multiple files are found set true to retrieve
+    %%%           listfound: Optional Input: Default = 0,  Lists all files found durng search
+    %%%     selectfirstfile: Optional Input: Default = 0,  When multiple files are found set true to retrieve
     %%%                                                    the first in list otherwise show warning and return nothing
     %%%
     %%% Searches are constructed by placing tags into a search query
@@ -39,20 +39,20 @@ classdef query_files_obj < handle
     %%%
     %%% Output
     %%%     Q: A structure containing various variables.
-    %%%         SessionList: {'SessionLabel'  'filepath/...'}     % The original query
-    %%%           FileCheck: [708x1 logical]                      % Logical index indicating the existence of files matching the search query for each subject
+    %%%         searchpaths: {'SessionLabel'  'filepath/...'}     % The original query
+    %%%           fileindexmat: [708x1 logical]                      % Logical index indicating the existence of files matching the search query for each subject
     %%%             rootdir: ''                                   % Optional Input: Prefix for all search paths.
-    %%%           ListFound: 0                                    % Optional Input: Lists all files found durng search
-    %%%     SelectFirstFile: 0                                    % Optional Input: when multiple files are found set true to retrieve the first in list
+    %%%           listfound: 0                                    % Optional Input: Lists all files found durng search
+    %%%     selectfirstfile: 0                                    % Optional Input: when multiple files are found set true to retrieve the first in list
     %%%       CorrectSubIDc: [1x1 struct]                         % Correct CBU IDs per result. Each query is contained in a separate field
-    %%%           FileNames: [1x1 struct]                         % Full file names without wildcards for each subject and each query
-    %%%     FileCheckByName: [1x1 struct]                         % Same as FileCheck, but each query is contained in a separate field
-    %%%            FileInfo: [1x1 struct]                         % Contains date created (as given by OS) for each file found
-    %%%      AllExistSubInd: [1x582 double]                       % Linear index for subjects that match all queries [same as find(all(obj.FileCheck,2)) ]
+    %%%           filenames: [1x1 struct]                         % Full file names without wildcards for each subject and each query
+    %%%     fileindex: [1x1 struct]                         % Same as fileindexmat, but each query is contained in a separate field
+    %%%            fileinfo: [1x1 struct]                         % Contains date created (as given by OS) for each file found
+    %%%      allexist: [1x582 double]                       % Linear index for subjects that match all queries [same as find(all(obj.fileindexmat,2)) ]
     %%%
     %%%
     %%% Working Example: Simple:
-    %%%     obj.SessionList = {'MEG' '/imaging/camcan/cc700-meg/data/mf22_spm12_pipeline/release002/preproc/<CCID>/rest/autobad_sss_skip20_fl_rest.fif'}
+    %%%     obj.searchpaths = {'MEG' '/imaging/camcan/cc700-meg/data/mf22_spm12_pipeline/release002/preproc/<CCID>/rest/autobad_sss_skip20_fl_rest.fif'}
     %%%     Q = CCQuery_CheckFiles(Q)
     %%%
     %%% Working Example: Complex: (2 ID types, and wildcard)
@@ -73,16 +73,16 @@ classdef query_files_obj < handle
     %%%
     %%% Construct a query called "Smooth".
     %%%
-    %%%     obj.SessionList = {
+    %%%     obj.searchpaths = {
     %%%         'Smooth' '/imaging/camcan/cc280/mri/pipeline/release003/RestingState/aamod_smooth_00001/<MRI280ID>/RestingState/sswarfMR*_<CC280ID>-0002.nii'
     %%%         };
     %%%     Q = CCQuery_CheckFiles(Q);
     %%%
     %%% View / get all filenames by typing
-    %%% filenames = obj.FileNames.Smooth
+    %%% filenames = obj.filenames.Smooth
     %%%
     %%% Get only those files that exist
-    %%% filenames = obj.FileNames.Smooth(obj.FileCheckByName.Smooth)
+    %%% filenames = obj.filenames.Smooth(obj.fileindex.Smooth)
     %%%
     %%% Note: the best way to construct a search query is to ensure one of the
     %%% files exists. e.g. type
@@ -95,43 +95,66 @@ classdef query_files_obj < handle
     %%% Darren Price. Last Updated (02/09/2017)
     
     properties
-        SelectFirstFile = false
+        selectfirstfile = false
         idlist = '';
         iddata
         idhead
-        SessionList = [];
+        searchpaths = [];
         sublist = [];
-        FileCheck
+        fileindexmat
         rootdir = '';
         debug = false;
         verbose = false;
-        ListFound = false;
+        listfound = false;
         ID
-        FileNames
-        FileCheckByName
-        DataFlags
-        FileInfo
-        SeriesNumbers
-        AllExistSubInd
+        filenames
+        fileindex
+        dataflags
+        fileinfo
+        seriesnumbers
+        allexist
     end
-    %     properties (Hidden)
-    %
-    %     end
-    methods (Hidden)
-        function addlistener(obj, property, eventname, callback)
-            addlistener@addlistener(obj, property, eventname, callback)
-        end
-    end
+       
+%     methods (Hidden)
+%         function addlistener(obj, property, eventname, callback)
+%             addlistener@addlistener(obj, property, eventname, callback)
+%         end
+%     end
     
-    methods
-        function obj = query_files_obj(SessionList, idlist)
+    methods            
+        function obj = query_files_obj(idlist, searchpaths)
             if nargin == 0
-                obj.SessionList = {'' ''};
-                obj.idlist = '';
+                error('At least one argument is required, idlist and optional searchpaths. See <a href="matlab:edit query_files_obj_example.m">query_files_obj_example.m</a>')
+            elseif nargin == 1
+                if exist(idlist,'file')
+                    obj.idlist = idlist;
+                else
+                    error('queryfs:idlistnotfound', 'Could not find specified idlist %s', idlist)
+                end
             else
-                obj.SessionList = SessionList;
+                obj.searchpaths = searchpaths;
                 obj.idlist = idlist;
-                obj = checkfiles(obj);
+                obj.checkfiles();
+            end
+        end
+        
+        function obj = addsearchpath(obj, name, path)
+            if nargin == 1
+                if iscell(name)
+                    obj.searchpaths = name;
+                else
+                    error('When using only one input, argument 1 should be a cell array {''name'' ''searchpaths''}')
+                end
+            end
+            
+            if isempty(obj.searchpaths)
+                obj.searchpaths = {name path};
+            else
+                if ~strcmp(obj.searchpaths(:,1), name)
+                    obj.searchpaths = [obj.searchpaths; {name path}];
+                else
+                    error('queryfs:nameexists','Name %s already exists in the searchpaths', name)
+                end
             end
         end
         
@@ -151,21 +174,21 @@ classdef query_files_obj < handle
             % C = csvimport('dataflags.csv','delimiter','\t');
             
             % Check Files Exist.
-            obj.FileCheck = false(Nsubs,size(obj.SessionList,1));
+            obj.fileindexmat = false(Nsubs,size(obj.searchpaths,1));
             
             if ~obj.verbose
                 printprogCR = false;
             else
                 printprogCR = true;
-                obj.ListFound = true;
+                obj.listfound = true;
             end
             
             % Validate search paths
-            for sesi = 1:size(obj.SessionList,1)
-                sp = obj.SessionList{sesi,2};
+            for sesi = 1:size(obj.searchpaths,1)
+                sp = obj.searchpaths{sesi,2};
                 if obj.debug == false
                     if isempty(regexp(sp, '<*>','ONCE'))
-                        disp(['ERROR in: ' obj.SessionList{sesi,1}])
+                        disp(['ERROR in: ' obj.searchpaths{sesi,1}])
                         error('No tag (i.e. <ID>) found in search string')
                     end
                 end
@@ -175,17 +198,17 @@ classdef query_files_obj < handle
                 obj.ID.(obj.idhead{hi}) = obj.iddata(:,hi);
             end
             
-            for sesi = 1:size(obj.SessionList,1)
-                %     obj.CorrectSubIDc.(obj.SessionList{sesi,1}) = cell(Nsubs,1); % will write right in to Q so set up cells. Also ensures output is always required size
-                obj.FileNames.(obj.SessionList{sesi,1}) = cell(1,Nsubs);
-                obj.FileCheckByName.(obj.SessionList{sesi,1}) = false(Nsubs,1);
-                obj.DataFlags.(obj.SessionList{sesi,1}).Message = '';
-                obj.DataFlags.(obj.SessionList{sesi,1}).Index = false(Nsubs,1);
+            for sesi = 1:size(obj.searchpaths,1)
+                %     obj.CorrectSubIDc.(obj.searchpaths{sesi,1}) = cell(Nsubs,1); % will write right in to Q so set up cells. Also ensures output is always required size
+                obj.filenames.(obj.searchpaths{sesi,1}) = cell(1,Nsubs);
+                obj.fileindex.(obj.searchpaths{sesi,1}) = false(Nsubs,1);
+                obj.dataflags.(obj.searchpaths{sesi,1}).Message = '';
+                obj.dataflags.(obj.searchpaths{sesi,1}).Index = false(Nsubs,1);
                 
-                fprintf('\n\nChecking: %s', obj.SessionList{sesi,1})
+                fprintf('\n\nChecking: %s', obj.searchpaths{sesi,1})
                 
-                if size(obj.SessionList, 2) == 3
-                    sesuse = obj.SessionList{sesi,3}; % assign the session search list
+                if size(obj.searchpaths, 2) == 3
+                    sesuse = obj.searchpaths{sesi,3}; % assign the session search list
                 else
                     sesuse = 1:4;
                 end
@@ -197,7 +220,7 @@ classdef query_files_obj < handle
                         disp(SubCCIDc{ii})
                     end
                     
-                    Format = fullfile(obj.rootdir,obj.SessionList{sesi,2});
+                    Format = fullfile(obj.rootdir,obj.searchpaths{sesi,2});
                     [st, en] = regexpi(Format, '<\w{1,}>');
                     
                     % Check which tags are in Format
@@ -209,7 +232,7 @@ classdef query_files_obj < handle
                     tagmem = ismember(tags, obj.idhead);
                     if any(ismember(tags, obj.idhead) == 0)
                         error([
-                            sprintf('The following tags were not found in ID list (%s) for session %s: ', obj.idlist, obj.SessionList{sesi,1}),...
+                            sprintf('The following tags were not found in ID list (%s) for session %s: ', obj.idlist, obj.searchpaths{sesi,1}),...
                             sprintf('<%s> ', tags{tagmem == 0})
                             ]);
                     end
@@ -220,20 +243,20 @@ classdef query_files_obj < handle
                             Format = strrep(Format,sprintf('<%s>',obj.idhead{ci}),obj.iddata{ii,ci});
                         end
                     end
-                    [D, Format] = findfile(Format, obj.SelectFirstFile);
+                    [D, Format] = findfile(Format, obj.selectfirstfile);
                     
                     % Add Date Info
                     if ~isempty(D)
                         if ~isempty(D(1).datenum)
-                            obj.FileInfo.(obj.SessionList{sesi,1}).datestr{ii} = D.date;
-                            obj.FileInfo.(obj.SessionList{sesi,1}).datenum(ii) = D.datenum;
+                            obj.fileinfo.(obj.searchpaths{sesi,1}).datestr{ii} = D.date;
+                            obj.fileinfo.(obj.searchpaths{sesi,1}).datenum(ii) = D.datenum;
                         else
-                            obj.FileInfo.(obj.SessionList{sesi,1}).datestr{ii} = 0;
-                            obj.FileInfo.(obj.SessionList{sesi,1}).datenum(ii) = 0;
+                            obj.fileinfo.(obj.searchpaths{sesi,1}).datestr{ii} = 0;
+                            obj.fileinfo.(obj.searchpaths{sesi,1}).datenum(ii) = 0;
                         end
                         % Add correct IDs (probably not necessary unless >1 ID possible for each ID type
                         %             for tag = tags
-                        %                 obj.CorrectID.(obj.SessionList{sesi,1}).(tag{1})(ii) = obj.ID.(tag{1})(ii);
+                        %                 obj.CorrectID.(obj.searchpaths{sesi,1}).(tag{1})(ii) = obj.ID.(tag{1})(ii);
                         %             end
                     end
                     
@@ -244,7 +267,7 @@ classdef query_files_obj < handle
                     elseif size(D,1) == 0
                         action = 3; % no result, do nothing
                     elseif size(D,1) > 1
-                        if ~obj.SelectFirstFile
+                        if ~obj.selectfirstfile
                             action = 1; % warn that multiple files exist
                         else
                             action = 4; % return the first file in list
@@ -254,15 +277,15 @@ classdef query_files_obj < handle
                     % Perform action
                     switch action
                         case 1 % multiple files
-                            if obj.SelectFirstFile == 1
+                            if obj.selectfirstfile == 1
                                 lsOut = [fileparts(Format) D(ii).name];
-                                obj.FileCheck(ii,sesi) = true;
-                                obj.FileNames.(obj.SessionList{sesi,1}){ii}; %#ok<VUNUS>
-                                obj.FileCheckByName.(obj.SessionList{sesi,1})(ii,1) = 1;
-                                if obj.ListFound; fprintf('%s         \n', lsOut); end
+                                obj.fileindexmat(ii,sesi) = true;
+                                obj.filenames.(obj.searchpaths{sesi,1}){ii}; %#ok<VUNUS>
+                                obj.fileindex.(obj.searchpaths{sesi,1})(ii,1) = 1;
+                                if obj.listfound; fprintf('%s         \n', lsOut); end
                             else
                                 warning(['The following files were found for your query: ' Format])
-                                warning('Set obj.SelectFirstFile = 1 if you want to use the first file');
+                                warning('Set obj.selectfirstfile = 1 if you want to use the first file');
                                 dir(Format)
                                 fprintf(1,'\n\n     ');
                             end
@@ -270,9 +293,9 @@ classdef query_files_obj < handle
                         case 2 % One file found
                             [folder, NULL, NULL] = fileparts(Format); %#ok<*NASGU>
                             lsOut = fullfile(folder,D.name);
-                            obj.FileCheck(ii,sesi) = true;
-                            obj.FileNames.(obj.SessionList{sesi,1}){ii} = lsOut;
-                            obj.FileCheckByName.(obj.SessionList{sesi,1})(ii,1) = 1;
+                            obj.fileindexmat(ii,sesi) = true;
+                            obj.filenames.(obj.searchpaths{sesi,1}){ii} = lsOut;
+                            obj.fileindex.(obj.searchpaths{sesi,1})(ii,1) = 1;
                             
                         case 3
                             % Do nothing
@@ -281,79 +304,28 @@ classdef query_files_obj < handle
                             D = D(1);
                             [folder, NULL, NULL] = fileparts(Format);
                             lsOut = fullfile(folder,D.name);
-                            obj.FileCheck(ii,sesi) = true;
-                            obj.FileNames.(obj.SessionList{sesi,1}){ii} = lsOut;
-                            obj.FileCheckByName.(obj.SessionList{sesi,1})(ii,1) = 1;
+                            obj.fileindexmat(ii,sesi) = true;
+                            obj.filenames.(obj.searchpaths{sesi,1}){ii} = lsOut;
+                            obj.fileindex.(obj.searchpaths{sesi,1})(ii,1) = 1;
                     end
                     
-                    if obj.ListFound && (action == 2 || action == 4)
+                    if obj.listfound && (action == 2 || action == 4)
                         disp('      ');
                         disp(lsOut);
                     end
-                    
-                    % Check whether the file being searched for contains dicom header
-                    % info. If so, and the CCID is being used as a search crieria
-                    % within that file name, then remove and warn user.
-                    if ~isempty(obj.FileNames.(obj.SessionList{sesi,1}){ii})
-                        CheckFilenameForCCID(obj, sesi, obj.FileNames.(obj.SessionList{sesi,1}){ii}); % will throw error if fails test
-                    end
-                    
-                    
-                    %         % Check for data flags and report
-                    %         FormattedPath = obj.FileNames.(obj.SessionList{sesi,1}){ii};
-                    %         if ~isempty(FormattedPath)
-                    %             for ci = 2:size(C,2)
-                    %                 if ~isempty(regexp(FormattedPath, C{1, ci},'ONCE')) && obj.FileCheck(ii,sesi) == true && int8(str2double(C{ii+3, ci})) == 1
-                    %                     obj.DataFlags.(obj.SessionList{sesi,1}).(C{2, ci}).message = C{3, ci};
-                    %                     obj.DataFlags.(obj.SessionList{sesi,1}).(C{2, ci}).flag(ii,1) = true;
-                    %                     flagfound = true;
-                    %                     fprintf('\n')
-                    %                     fprintf('Data Flag: %s:  %s', SubCCIDc{ii}, C{3, ci})
-                    %                     fprintf('          ')
-                    %                 end
-                    %             end
-                    %         end
-                    % end flag checks.
+
                 end
                 
-                fprintf(1,['\nTotal files found: ' num2str(sum(obj.FileCheck(:,sesi))) '\n\n--------------------------\n\n']);
-                if sum(obj.FileCheck(:,sesi)) == 0
+                fprintf(1,['\nTotal files found: ' num2str(sum(obj.fileindexmat(:,sesi))) '\n\n--------------------------\n\n']);
+                if sum(obj.fileindexmat(:,sesi)) == 0
                     warning('Check your file paths and that you have used the correct ID type')
                     disp(['The last path searched for was ' Format])
-                    disp('NOTE: In order to select only the first file from a list (such as a list of dicoms), set obj.SelectFirstFile = 1')
+                    disp('NOTE: In order to select only the first file from a list (such as a list of dicoms), set obj.selectfirstfile = 1')
                 end
                 
-                obj.SeriesNumbers.(obj.SessionList{sesi,1}) = get_series_numbers(obj.FileNames.(obj.SessionList{sesi,1}));
             end
             
-            obj.AllExistSubInd = find(all(obj.FileCheck,2))';
-            
-            % % Remove bad subjects
-            % if ExcludeSubjects
-            %     obj = CCQuery_ExcludeSubjects(obj);
-            % end
-            
-            %     function [Q, D, Format] = findfile(Format, Sub280MRIIDc, Q)
-            %         if ~isempty(strfind(Format,'<MRI280ID>'))   % use 280 list
-            %             D = [];
-            %             found = 0;
-            %             for sfi = sesuse
-            %                 if ~strcmp(Sub280MRIIDc{ii,sfi},'') && found == 0
-            %                     [D2, Format2] = FindFiles(strrep(Format,'<MRI280ID>',Sub280MRIIDc{ii,sfi}),obj.SelectFirstFile);
-            %                     if ~isempty(D2)
-            %                         obj.CorrectSubIDc.(obj.SessionList{sesi,1}){ii,1} = Sub280MRIIDc{ii,sfi}; % record correct subject ID
-            %                         obj.SessNumFound.(obj.SessionList{sesi,1})(ii) = sfi;
-            %                         Format = Format2; % change Format to correct file location
-            %                         D = D2;
-            %                         found = 1;
-            %                     end
-            %                 end
-            %             end
-            %         else
-            %             [D, Format] = FindFiles(Format,obj.SelectFirstFile); % use 700
-            %             obj.CorrectSubIDc.(obj.SessionList{sesi,1}){ii} = SubCBUIDc{ii};
-            %         end
-            %     end
+            obj.allexist = find(all(obj.fileindexmat,2))';
             
             function [D, Format] = findfile(Format, FirstFile)
                 [fol, NULL, NULL] = fileparts(Format);
@@ -367,11 +339,11 @@ classdef query_files_obj < handle
                         L = L{1};
                         
                         if length(L) > 1 % there will only be a > 1 line feed if multiple items found.
-                            % if more than one line then either warn user or just pick first file based on value in obj.SelectFirstFile
+                            % if more than one line then either warn user or just pick first file based on value in obj.selectfirstfile
                             if FirstFile == 1
                                 L = L(1);
                             else
-                                warning('More than one file found. Set obj.SelectFirstFile = 1 if you want to use the first file');
+                                warning('More than one file found. Set obj.selectfirstfile = 1 if you want to use the first file');
                             end
                         end
                         D = dir(L{1}); % Once the path has been worked out, then use dir, which gives the proper D structure.
@@ -382,32 +354,6 @@ classdef query_files_obj < handle
                 else
                     % no need for ls (faster)
                     D = dir(Format);
-                end
-            end
-            
-            function [] = CheckFilenameForCCID(obj, sesi, Format)
-                [NULL, ffile, NULL] = fileparts(Format); %#ok<SETNU>
-                [NULL, dfile, NULL] = fileparts(obj.SessionList{sesi,2});
-                
-                if ~isempty(strfind(ffile, 'MR1')) && (~isempty(strfind(dfile, 'CC')) || ~isempty(strfind(dfile, 'cc')))
-                    fprintf('\n\n\n')
-                    disp('################################################################')
-                    disp('####################   ERROR MESSAGE   #########################')
-                    disp('Please use the folder name to identify data rather than filename.')
-                    disp('Unfortunately, filename IDs may contain typographic errors that could')
-                    disp('result in data being missed. Folder names have been carefully verified')
-                    disp('and should not contain any errors.')
-                    disp('For example you searched for: ')
-                    disp(['    ', obj.SessionList{sesi,2}])
-                    disp('you should instead search for (using a wildcard in place of the filename ID): ')
-                    checkstrings = {'<CCID>', '<CC280ID>', '<ccID>', '<cc280ID>'};
-                    fi = cellfun(@(t) ~isempty(strfind(obj.SessionList{sesi,2}, t)), checkstrings, 'UniformOutput',true);
-                    disp(['    ', strrep(obj.SessionList{sesi,2}, checkstrings{fi},'*')])
-                    disp('while including an ID tag in the folder path.')
-                    disp('################################################################')
-                    disp('################################################################')
-                    fprintf('\n')
-                    error(sprintf('The CCID tag found in the filename may conflict with a possible\n typo in the filename. See above message for more information.')) %#ok<SPERR>
                 end
             end
         end
