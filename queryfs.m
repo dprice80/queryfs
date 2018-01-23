@@ -78,7 +78,7 @@ function [Q] = queryfs(Q)
 %%%     Q.searchpaths = {
 %%%         'smooth' '/imaging/pathtodata/<MRIID>/RestingState/sswarfMR*_<ID1>-0002.nii'
 %%%         };
-%%%     Q = query_files(Q);
+%%%     Q = queryfs(Q);
 %%%
 %%% View / get all filenames by typing
 %%% filenames = Q.filenames.smooth
@@ -167,14 +167,21 @@ for sesi = 1:size(Q.searchpaths,1)
         printProgress(ii, Nsubs, printprogCR)
         
         Format = fullfile(Q.rootdir,Q.searchpaths{sesi,2});
-        [st, en] = regexpi(Format, '<\w{1,}>');
+        [st, en] = regexpi(Format, '<([><A-Z|0-9]){1,}>');
         
         % Check which tags are in Format
-        clear tags
+        tags = {};
+        tagsref = {};
+        tagsfmt = {};
         for ti = 1:length(st)
-            tags{ti} = Format(st(ti)+1:en(ti)-1); %#ok<AGROW>
+            tagstr = splitstring(Format(st(ti)+1:en(ti)-1),'|');
+            for tsi = 1:length(tagstr)
+                tags{end+1} = tagstr{tsi}; %#ok<AGROW>
+                tagsref{end+1} = Q.searchpaths{sesi,1}; %#ok<AGROW>
+                tagsfmt{end+1} = Format(st(ti)+1:en(ti)-1);  %#ok<AGROW> Associate this tag with the tag set
+            end
         end
-        
+
         tagmem = ismember(tags, idhead);
         if any(ismember(tags, idhead) == 0)
             error([
@@ -183,13 +190,38 @@ for sesi = 1:size(Q.searchpaths,1)
                 ]);
         end
         
-        % Replace tags
-        for ci = 1:length(idhead)
-            if ~isempty(fsinfo{ii,ci}) % only replace column if ID is not emtpy.
-                Format = strrep(Format,sprintf('<%s>',idhead{ci}),fsinfo{ii,ci});
+        % Replace non OR tags (tags have been verified here)
+        for ti = 1:length(tags)
+            if isempty(strfind(tagsfmt{ti},'|')) % exclude OR operators for now
+                ci = strcmp(idhead, tags{ti}); % find col index of tag
+                if ~isempty(fsinfo{ii,ci}) % only replace column if ID is not emtpy.
+                    Format = strrep(Format, sprintf('<%s>',tagsfmt{ti}), fsinfo{ii,ci});
+                end
             end
         end
-        [D, Format] = findfile(Format, Q.returnfirstfile);
+        
+        FormatLogical = {};
+        DLogical = {};
+        D = [];
+        % Now loop through logical tags
+        if ~isempty(strfind(Format,'|')) % if any tags contain OR operators loop through them, otherwise go straight to search
+            dfound = false; % Loop will skip once first file is found
+            for ti = 1:length(tags)
+                if ~isempty(strfind(tagsfmt{ti},'|')) && dfound == false
+                    ci = strcmp(idhead, tags{ti}); % find col index of tag
+                    if ~isempty(fsinfo{ii,ci}) % only replace column if ID is not emtpy.
+                        FormatLogical = strrep(Format, sprintf('<%s>',tagsfmt{ti}), fsinfo{ii,ci});
+                        [D, FormatLogical] = findfile(FormatLogical, Q.returnfirstfile);
+                        if ~isempty(D)
+                            dfound = true;
+                        end
+                    end
+                end
+            end
+            Format = FormatLogical;
+        else
+            [D, Format] = findfile(Format, Q.returnfirstfile);
+        end
         
         % Add Date Info
         if ~isempty(D)
