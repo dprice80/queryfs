@@ -328,6 +328,7 @@ for sesi = 1:size(Q.searchpaths,1)
     if isfield(Q, 'extractfun') && isa(Q.extractfun, 'function_handle')
         Q.extracted.(Q.searchpaths{sesi,1}) = Q.extractfun(Q.filenames.(Q.searchpaths{sesi,1}));
     end
+    Q.filenames.(Q.searchpaths{sesi,1}) = shiftdim(Q.filenames.(Q.searchpaths{sesi,1}));
 end
 
 Q.allexist = find(all(Q.fileindexmat,2))';
