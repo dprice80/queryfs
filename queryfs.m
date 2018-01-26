@@ -207,7 +207,7 @@ for sesi = 1:size(Q.searchpaths,1)
         if ~isempty(strfind(Format,'|')) % if any tags contain OR operators loop through them, otherwise go straight to search
             dfound = false; % Loop will skip once first file is found
             for ti = 1:length(tags)
-                if ~isempty(strfind(tagsfmt{ti},'|')) && dfound == false
+                if ~isempty(strfind(tagsfmt{ti},'|')) && dfound == false % skip if file found already
                     ci = strcmp(idhead, tags{ti}); % find col index of tag
                     if ~isempty(fsinfo{ii,ci}) % only replace column if ID is not emtpy.
                         FormatLogical = strrep(Format, sprintf('<%s>',tagsfmt{ti}), fsinfo{ii,ci});
