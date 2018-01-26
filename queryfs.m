@@ -1,5 +1,5 @@
-classdef query_files_obj < handle
-    %%% query_files checks through all specified directories and returns
+classdef queryfs < handle
+    %%% queryfs checks through all specified directories and returns
     %%% a structure containing data about the files found.
     %%%
     %%% Inputs
@@ -114,15 +114,21 @@ classdef query_files_obj < handle
         seriesnumbers
         allexist
     end
-       
-%     methods (Hidden)
-%         function addlistener(obj, property, eventname, callback)
-%             addlistener@addlistener(obj, property, eventname, callback)
-%         end
-%     end
     
-    methods            
-        function obj = query_files_obj(idlist, searchpaths)
+    %     methods (Hidden)
+    %         function addlistener(obj, property, eventname, callback)
+    %             addlistener@addlistener(obj, property, eventname, callback)
+    %         end
+    %     end
+    
+    methods
+        function obj = queryfs(idlist, searchpaths)
+            
+            % Check paths
+            if ~exist('splitstring','file')
+                addpath([fileparts(mfilename('fullpath')) '/utils'])
+            end
+            
             if nargin == 0
                 error('At least one argument is required, idlist and optional searchpaths. See <a href="matlab:edit query_files_obj_example.m">query_files_obj_example.m</a>')
             elseif nargin == 1
@@ -221,12 +227,25 @@ classdef query_files_obj < handle
                     end
                     
                     Format = fullfile(obj.rootdir,obj.searchpaths{sesi,2});
-                    [st, en] = regexpi(Format, '<\w{1,}>');
+                    [st, en] = regexpi(Format, '<([><A-Z|0-9]){1,}>');
                     
                     % Check which tags are in Format
-                    clear tags
+                    %                     clear tags
+                    %                     for ti = 1:length(st)
+                    %                         tags{ti} = Format(st(ti)+1:en(ti)-1); %#ok<AGROW>
+                    %                     end
+                    
+                    % Check which tags are in Format
+                    tags = {};
+                    tagsref = {};
+                    tagsfmt = {};
                     for ti = 1:length(st)
-                        tags{ti} = Format(st(ti)+1:en(ti)-1); %#ok<AGROW>
+                        tagstr = splitstring(Format(st(ti)+1:en(ti)-1),'|');
+                        for tsi = 1:length(tagstr)
+                            tags{end+1} = tagstr{tsi}; %#ok<AGROW>
+                            tagsref{end+1} = obj.searchpaths{sesi,1}; %#ok<AGROW>
+                            tagsfmt{end+1} = Format(st(ti)+1:en(ti)-1);  %#ok<AGROW> Associate this tag with the tag set
+                        end
                     end
                     
                     tagmem = ismember(tags, obj.idhead);
@@ -237,14 +256,49 @@ classdef query_files_obj < handle
                             ]);
                     end
                     
-                    % Replace tags
-                    for ci = 1:length(obj.idhead)
-                        if ~isempty(obj.iddata{ii,ci}) % only replace column if ID is not emtpy.
-                            Format = strrep(Format,sprintf('<%s>',obj.idhead{ci}),obj.iddata{ii,ci});
+                    
+                    %%%%%%%%%
+                    % Replace non OR tags (tags have been verified here)
+                    for ti = 1:length(tags)
+                        if isempty(strfind(tagsfmt{ti},'|')) % exclude OR operators for now
+                            ci = strcmp(obj.idhead, tags{ti}); % find col index of tag
+                            if ~isempty(obj.iddata{ii,ci}) % only replace column if ID is not emtpy.
+                                Format = strrep(Format, sprintf('<%s>',tagsfmt{ti}), obj.iddata{ii,ci});
+                            end
                         end
                     end
-                    [D, Format] = findfile(Format, obj.selectfirstfile);
                     
+                    FormatLogical = {};
+                    DLogical = {};
+                    D = [];
+                    % Now loop through logical tags
+                    if contains(Format,'|') % if any tags contain OR operators loop through them, otherwise go straight to search
+                        dfound = false; % Loop will skip once first file is found
+                        for ti = 1:length(tags)
+                            if contains(tagsfmt{ti},'|') && dfound == false % skip if file found already
+                                ci = strcmp(obj.idhead, tags{ti}); % find col index of tag
+                                if ~isempty(obj.iddata{ii,ci}) % only replace column if ID is not emtpy.
+                                    FormatLogical = strrep(Format, sprintf('<%s>',tagsfmt{ti}), obj.iddata{ii,ci});
+                                    [D, FormatLogical] = findfile(FormatLogical, obj.selectfirstfile);
+                                    if ~isempty(D)
+                                        dfound = true;
+                                    end
+                                end
+                            end
+                        end
+                        Format = FormatLogical;
+                    else
+                        [D, Format] = findfile(Format, obj.selectfirstfile);
+                    end
+                    %%%%%%%%%
+                    % Replace tags
+                    %                     for ci = 1:length(obj.idhead)
+                    %                         if ~isempty(obj.iddata{ii,ci}) % only replace column if ID is not emtpy.
+                    %                             Format = strrep(Format,sprintf('<%s>',obj.idhead{ci}),obj.iddata{ii,ci});
+                    %                         end
+                    %                     end
+                    %                     [D, Format] = findfile(Format, obj.selectfirstfile);
+                    %
                     % Add Date Info
                     if ~isempty(D)
                         if ~isempty(D(1).datenum)
@@ -313,7 +367,7 @@ classdef query_files_obj < handle
                         disp('      ');
                         disp(lsOut);
                     end
-
+                    
                 end
                 
                 fprintf(1,['\nTotal files found: ' num2str(sum(obj.fileindexmat(:,sesi))) '\n\n--------------------------\n\n']);
@@ -329,10 +383,10 @@ classdef query_files_obj < handle
             
             function [D, Format] = findfile(Format, FirstFile)
                 [fol, NULL, NULL] = fileparts(Format);
-                if obj.debug == true;
+                if obj.debug == true
                     fprintf('Search string %s \n\n              ',Format)
                 end
-                if ~isempty(strfind(fol,'*')) % use ls to get an exact folder path if folder contains * (slows the script down)
+                if contains(fol,'*') % use ls to get an exact folder path if folder contains * (slows the script down)
                     try
                         L = ls(Format); % use ls to get file list using * (because it doesn't work with dir if * is in path folder names)
                         L = textscan(L,'%s');
