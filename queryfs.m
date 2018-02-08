@@ -57,6 +57,7 @@ classdef queryfs < handle
         fileindexmat
         ID
         filenames
+        folderpaths
         fileindex
         extracted
         fileinfo
@@ -181,7 +182,7 @@ classdef queryfs < handle
                 end
                 
                 for ii = shiftdim(obj.sublist)'
-                    printProgress(ii, Nsubs, printprogCR)
+                    printProgress(ii, length(obj.sublist), printprogCR)
                     
                     if obj.verbose == 1
                         fldn = fieldnames(obj.ID);
@@ -267,26 +268,26 @@ classdef queryfs < handle
                     end
                     
                     % Figure out action to take
-                    action = 0;
+                    action = 'none';
                     if size(D,1) == 1
-                        action = 2; % only 1 result so return filepath
+                        action = 'onefound'; % only 1 result so return filepath
                     elseif size(D,1) == 0
-                        action = 3; % no result, do nothing
+                        action = 'notfound'; % no result, do nothing
                     elseif size(D,1) > 1
                         if ~obj.selectfirstfile
-                            action = 1; % warn that multiple files exist
+                            action = 'multifound'; % warn that multiple files exist
                         else
-                            action = 4; % return the first file in list
+                            action = 'returnfirst'; % return the first file in list
                         end
                     end
                     
                     % Perform action
                     switch action
-                        case 1 % multiple files
+                        case 'multifound' % multiple files
                             if obj.selectfirstfile == 1
                                 lsOut = [fileparts(Format) D(ii).name];
                                 obj.fileindexmat(ii,sesi) = true;
-                                obj.filenames.(obj.searchpaths{sesi,1}){ii}; %#ok<VUNUS>
+%                                 obj.filenames.(obj.searchpaths{sesi,1}){ii};
                                 obj.fileindex.(obj.searchpaths{sesi,1})(ii,1) = 1;
                                 if obj.verbose; fprintf('%s         \n', lsOut); end
                             else
@@ -297,22 +298,23 @@ classdef queryfs < handle
                                 fprintf(1,'\n     ');
                             end
                             
-                        case 2 % One file found
+                        case 'onefound' % One file found
                             [folder, NULL, NULL] = fileparts(Format); %#ok<*NASGU>
                             lsOut = fullfile(folder,D.name);
                             obj.fileindexmat(ii,sesi) = true;
                             obj.filenames.(obj.searchpaths{sesi,1}){ii} = lsOut;
                             obj.fileindex.(obj.searchpaths{sesi,1})(ii,1) = 1;
-                            
-                        case 3
+                            obj.folderpaths.(obj.searchpaths{sesi,1}){ii} = fileparts(lsOut);
+                        case 'notfound'
                             % Do nothing
                             
-                        case 4 % Select first file from multiple files found
+                        case 'returnfirst' % Select first file from multiple files found
                             D = D(1);
                             [folder, NULL, NULL] = fileparts(Format);
                             lsOut = fullfile(folder,D.name);
                             obj.fileindexmat(ii,sesi) = true;
                             obj.filenames.(obj.searchpaths{sesi,1}){ii} = lsOut;
+                            obj.folderpaths.(obj.searchpaths{sesi,1}){ii} = fileparts(lsOut);
                             obj.fileindex.(obj.searchpaths{sesi,1})(ii,1) = 1;
                     end
                     
